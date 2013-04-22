@@ -1,0 +1,100 @@
+[2011/09/26]
+	1.新增日志工具(log.h)
+	2.资源管理器(CResourceMgr)添加字体管理功能
+	3.增加发布批处理程序(redist.bat)
+	4.增加打包批处理程序(pack.bat)
+
+[2011/09/28]
+	1.日志工具(log.h):修改行结束处理,新增日志组类(满足同时向多个流输出的需求),
+	  增加非MFC框架下的调试输出流(CDebugStream)
+
+[2011/10/09]
+	整理MFC条件编译开关
+
+[2011/10/24]
+	日志工具(log.h):
+		1).输出开关改用操纵子(manipulator)方式
+		2).时间戳改用运行时时间(之前使用编译时时间戳)
+
+[2011/10/25]
+	日志工具(log.h):
+		运行时控制输出消息头的内容
+
+[2011/10/27]
+	增加随机数类(random.h)
+
+[2011/10/31]
+	1.日志工具(log.h):改正关闭所有日志头的的操纵子的BUG
+	2.随机数类(random.h):改正随机浮点数的的生成方式;增加命中一组互斥事件之一的方法
+	3.(util_tmpl.h):增加累加算法(accumulate)
+
+[2011/11/07]
+	1.日志工具(log.h):增加日志级别控制
+	2.(util_tmpl.h):增加编译时log2工具(static_log2)
+
+[2011/11/08]
+	日志工具(log.h):
+		1).修改函数名(log_endl=>log_end_rec, endl=>log_endl)
+		2).修改类名(line_logger=>scope_logger)
+		3).新增函数(log_begin_rec(与log_end_rec配对))
+		4).新增块式输出工具宏
+
+[2011/11/10]
+	1.新增STL扩展组件(stl_ext.h)
+		1).增加VC6中ostream:operator<<(int64_t)的支持
+		2).原来util_tmpl.h中的accmulate算法移到stl_ext.h中
+
+[2011/11/11]
+	1.纳入TinyXML解析器
+	2.(log.h)增加从配置文件配置日志输出的函数
+
+[2011/11/14]
+	新增单件模式辅助工具(singleton.h)
+
+[2011/11/14]
+	(log.h)增加配置日志文件大小的函数
+
+[2011/11/21]
+	1.纳入loki库(ver0.1.3(支持VC6的最低版本))
+	2.增加从内存模板创建对话框的各封装类(tmpldlg.h(cpp))
+	3.增加日志输出窗口(logview.h(cpp)),日志工具(log.h)增加向logview输出的选项
+	4.(util_tmpl.h)增加mem_access泛函(访问成员变量),增加nextField工具(解析流式字节流)
+	5.(macro.h)增加BytesAlign和DWORDAlign字节对齐辅助宏
+
+[2011/11/22]
+	1.(tinyxml\tinyxml)TiXmlElement::Attribute增加默认属性值参数
+	2.(logview)增加最大行数限制功能
+	3.(log)部分较长的函数放到log.cpp中
+
+[2011/11/24]
+	(random.h)
+		1).改正nextFloat/nextDouble超过或大于1.0(f)的BUG;
+		2).增加泛型mutexHit算法;
+		3).随机数发生器改用Mersenne Twister
+
+[2011/11/25]
+	(random.h)random::nextUint(unsigned int nUpper)对nUpper是2的幂的情况进行优化
+
+[2011/12/22]
+	1.(util)新增创建目录树的函数
+	2.(log)修正日志模块不能自动创建目录的问题
+
+[2012/07/16]
+	1.(assoc_vector)新增组件:排序vector实现的关联容器
+	2.(buffer)新增组件:cyc_buf循环式缓冲区,fixed_buf固定缓冲区
+	3.(compare)增加临时模式的位操作,增加指针比较宏
+	4.(logview)增加右键菜单,提供自动滚动、只读模式切换等功能
+	5.(util_tmpl)next模版函数传入指针参数由引用改为指针
+	6.(net/*)新增客户端socket库
+	7.(redist_src.bat)新增源码发布模式
+
+[2012/08/15]
+	1.(_prolog.h)增加局部命名空间hy::detail,用于细节实现
+	2.(util_tmpl)新增函数dump_bytes用以输出十六进制字节数据
+	3.(threads.h)新增线程模型模板类
+	4.(log)日志模块修改程序结构;增加线程锁;增加管道输出方式
+	5.(buffer)fixed_buf,cyc_buf改为模版类，增加增长policy
+
+[2012/08/28]
+	1.(buffer)修改扩充缓冲区的BUG,修改cyc_buf的_repos()函数
+	2.(log)增加命名管道的OverlappedIO方式

@@ -1,0 +1,55 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "hydll", "hydll\hydll.vcxproj", "{074A6A32-BCE2-FA2C-1EC6-C54A8EA8ADAE}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "hylib", "static\hylib.vcxproj", "{8F318824-4C11-C439-D2C7-BB11073051C2}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "hymfcdll", "hymfcdll\hymfcdll.vcxproj", "{6A6FD1F8-2887-FE11-6383-3A638A30C1C2}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "hymfcdllex", "hymfcdllex\hymfcdllex.vcxproj", "{133492DD-E0E8-093D-9A84-8029DCCE26D6}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "trial", "trial\trial.vcxproj", "{96E12F5C-67D9-45FC-3BCB-4211DAD604CB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+		Template|Win32 = Template|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{074A6A32-BCE2-FA2C-1EC6-C54A8EA8ADAE}.Debug|Win32.ActiveCfg = Debug|Win32
+		{074A6A32-BCE2-FA2C-1EC6-C54A8EA8ADAE}.Debug|Win32.Build.0 = Debug|Win32
+		{074A6A32-BCE2-FA2C-1EC6-C54A8EA8ADAE}.Release|Win32.ActiveCfg = Release|Win32
+		{074A6A32-BCE2-FA2C-1EC6-C54A8EA8ADAE}.Release|Win32.Build.0 = Release|Win32
+		{074A6A32-BCE2-FA2C-1EC6-C54A8EA8ADAE}.Template|Win32.ActiveCfg = Release|Win32
+		{074A6A32-BCE2-FA2C-1EC6-C54A8EA8ADAE}.Template|Win32.Build.0 = Release|Win32
+		{8F318824-4C11-C439-D2C7-BB11073051C2}.Debug|Win32.ActiveCfg = Debug|Win32
+		{8F318824-4C11-C439-D2C7-BB11073051C2}.Debug|Win32.Build.0 = Debug|Win32
+		{8F318824-4C11-C439-D2C7-BB11073051C2}.Release|Win32.ActiveCfg = Release|Win32
+		{8F318824-4C11-C439-D2C7-BB11073051C2}.Release|Win32.Build.0 = Release|Win32
+		{8F318824-4C11-C439-D2C7-BB11073051C2}.Template|Win32.ActiveCfg = Template|Win32
+		{8F318824-4C11-C439-D2C7-BB11073051C2}.Template|Win32.Build.0 = Template|Win32
+		{6A6FD1F8-2887-FE11-6383-3A638A30C1C2}.Debug|Win32.ActiveCfg = Debug|Win32
+		{6A6FD1F8-2887-FE11-6383-3A638A30C1C2}.Debug|Win32.Build.0 = Debug|Win32
+		{6A6FD1F8-2887-FE11-6383-3A638A30C1C2}.Release|Win32.ActiveCfg = Release|Win32
+		{6A6FD1F8-2887-FE11-6383-3A638A30C1C2}.Release|Win32.Build.0 = Release|Win32
+		{6A6FD1F8-2887-FE11-6383-3A638A30C1C2}.Template|Win32.ActiveCfg = Template|Win32
+		{6A6FD1F8-2887-FE11-6383-3A638A30C1C2}.Template|Win32.Build.0 = Template|Win32
+		{133492DD-E0E8-093D-9A84-8029DCCE26D6}.Debug|Win32.ActiveCfg = Debug|Win32
+		{133492DD-E0E8-093D-9A84-8029DCCE26D6}.Debug|Win32.Build.0 = Debug|Win32
+		{133492DD-E0E8-093D-9A84-8029DCCE26D6}.Release|Win32.ActiveCfg = Release|Win32
+		{133492DD-E0E8-093D-9A84-8029DCCE26D6}.Release|Win32.Build.0 = Release|Win32
+		{133492DD-E0E8-093D-9A84-8029DCCE26D6}.Template|Win32.ActiveCfg = Template|Win32
+		{133492DD-E0E8-093D-9A84-8029DCCE26D6}.Template|Win32.Build.0 = Template|Win32
+		{96E12F5C-67D9-45FC-3BCB-4211DAD604CB}.Debug|Win32.ActiveCfg = Debug|Win32
+		{96E12F5C-67D9-45FC-3BCB-4211DAD604CB}.Debug|Win32.Build.0 = Debug|Win32
+		{96E12F5C-67D9-45FC-3BCB-4211DAD604CB}.Release|Win32.ActiveCfg = Release|Win32
+		{96E12F5C-67D9-45FC-3BCB-4211DAD604CB}.Release|Win32.Build.0 = Release|Win32
+		{96E12F5C-67D9-45FC-3BCB-4211DAD604CB}.Template|Win32.ActiveCfg = Template|Win32
+		{96E12F5C-67D9-45FC-3BCB-4211DAD604CB}.Template|Win32.Build.0 = Template|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
