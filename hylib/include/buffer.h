@@ -43,7 +43,7 @@ protected:
 	typedef cyc_buf<_Elastic, _GrowPolicy> _MyType;
 
 public:
-	cyc_buf(size_t size=255) {
+	explicit cyc_buf(size_t size=255) {
 		++size; // 环形缓冲区末尾需要一个空字节
 		size = DWORDAlign(size);
 		_total = size;
@@ -342,8 +342,10 @@ protected:
 	size_t		_total;
 	char		*_pbeg;
 	char		*_pend;
-	mutable unsigned _state;
+	unsigned	_state;
 };
+
+typedef cyc_buf<> CCycBuf;
 
 ////////////////////////////////////////////////////////////////////////////////
 template <class _GrowPolicy = HalfGrowPolicy>
@@ -353,15 +355,57 @@ protected:
 	typedef fixed_buf<_GrowPolicy> _MyType;
 
 public:
-	fixed_buf(size_t size=256) {
+	fixed_buf() {
+		_Init();
+	}
+
+	explicit fixed_buf(size_t size) {
 		size = DWORDAlign(size);
 		_total = size;
 		_data = new char[size];
 		_ppos = _data;
 		_state = STATE_NONE;
 	}
+
+	fixed_buf(const _MyType &o) {
+		_Init();
+		assign(o);
+	}
+
+	_MyType &operator = (const _MyType &o) {
+		if (this != &o)
+			assign(o);
+		return *this;
+	}
+
 	~fixed_buf() {
+		_Tidy();
+	}
+
+	void _Init() {
+		_total = 0;
+		_data = NULL;
+		_ppos = NULL;
+		_state = STATE_NONE;
+	}
+
+	void _Tidy() {
 		SafeDeleteArray(_data);
+	}
+
+	void assign(const _MyType &o) {
+		if (this == &o)
+			return;
+		ASSERT(!o.any_locked());
+		_Tidy();
+		if (o._data) {
+			_total = o._total;
+			_data = new char[_total];
+			_ppos = _data + o.peek(_data, _total);
+			_state = STATE_NONE;
+		} else {
+			_Init();
+		}
 	}
 
 	size_t size() const {
@@ -422,7 +466,7 @@ public:
 	}
 
 	size_t write(const void *buf, size_t len) {
-		assert(_data != NULL);
+		//assert(_data != NULL);
 
 		if (wlocked()) { return 0; }
 
@@ -437,7 +481,7 @@ public:
 	}
 
 	void *wlock(size_t &len) {
-		assert(_data);
+		//assert(_data);
 		
 		if (wlocked()) { return NULL; }
 
@@ -546,8 +590,65 @@ protected:
 	char		*_data;
 	size_t		_total;
 	char		*_ppos;
-	mutable unsigned _state;
+	unsigned	_state;
 };
+
+typedef fixed_buf<> CFixedBuf;
+
+template <class B1, class B2>
+inline size_t buf_transfor(B1 &b1, B2 &b2, size_t len) {
+	void *d = b2.wlock(len);
+	size_t rd = b1.read(d, len);
+	b2.wunlock(d, rd);
+	return rd;
+}
+
+template <class B, class T>
+inline B & buf_data_read(B &b, T &t) {
+	b.read(&t, sizeof(t));
+	return b;
+}
+
+template <class B, class T>
+inline B & buf_data_write(B &b, const T &t) {
+	b.write(&t, sizeof(t));
+	return b;
+}
+
+template <class B, class T>
+struct _buf_data_lock_guard {
+	_buf_data_lock_guard(B &b) : b_(b) {
+		size_t wt = sizeof(T);
+		ptr_ = reinterpret_cast<T *>(b_.wlock(wt));
+	}
+	~_buf_data_lock_guard() {
+		b_.wunlock(ptr_, sizeof(T));
+	}
+	T &get() {
+		return *ptr_;
+	}
+	T & operator * () {
+		return *ptr_;
+	}
+	T *operator -> () {
+		return ptr_;
+	}
+	operator T *() {
+		return ptr_;
+	}
+private:
+	B &b_;
+	T *ptr_;
+};
+
+#if 0
+template <class B, class T>
+inline _buf_data_lock_guard<B, T> _make_buf_data_lock_guard(B &b, T *dummy=NULL) {
+	(void)dummy;
+	return _buf_data_lock_guard<B, T>(b);
+}
+#define BUF_DATA_LOCK_GUARD(var, buf, type) _buf_data_lock_guard var((buf), static_cast<type *>(NULL))
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 _HYLIB_END
