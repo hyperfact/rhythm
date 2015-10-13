@@ -11,6 +11,7 @@
 #include "_prolog.h"
 #include "stl_ext.h"
 #include <time.h>
+#include <numeric>
 
 ////////////////////////////////////////////////////////////////////////////////
 // Mersenne Twister (Refers to MT19937 by Takuji Nishimura & Makoto Matsumoto)

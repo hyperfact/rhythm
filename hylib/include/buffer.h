@@ -43,7 +43,11 @@ protected:
 	typedef cyc_buf<_Elastic, _GrowPolicy> _MyType;
 
 public:
-	explicit cyc_buf(size_t size=255) {
+	cyc_buf() {
+		_Init();
+	}
+
+	explicit cyc_buf(size_t size) {
 		++size; // 环形缓冲区末尾需要一个空字节
 		size = DWORDAlign(size);
 		_total = size;
@@ -51,8 +55,48 @@ public:
 		_pbeg = _pend = _data;
 		_state = STATE_NONE;
 	}
+
+	cyc_buf(const cyc_buf &o) {
+		_Init();
+		assign(o);
+	}
+
 	~cyc_buf() {
+		_Tidy();
+	}
+
+	_MyType &operator = (const _MyType &o) {
+		if (this != &o)
+			assign(o);
+		return *this;
+	}
+
+	void _Init() {
+		_total = 0;
+		_data = NULL;
+		_pbeg = NULL;
+		_pend = NULL;
+		_state = STATE_NONE;
+	}
+
+	void _Tidy() {
 		SafeDeleteArray(_data);
+	}
+
+	void assign(const _MyType &o) {
+		if (this == &o)
+			return;
+		ASSERT(!o.any_locked());
+		_Tidy();
+		if (o._data) {
+			_total = o._total;
+			_data = new char[_total];
+			_pbeg = _data;
+			_pend = _data + o.peek(_data, _total);
+			_state = STATE_NONE;
+		} else {
+			_Init();
+		}
 	}
 
 	size_t size() const {
@@ -133,7 +177,7 @@ public:
 	}
 
 	size_t write(const void *buf, size_t len) {
-		assert(_data);
+		//assert(_data);
 		
 		if (wlocked()) { return 0; }
 
@@ -145,6 +189,8 @@ public:
 		if (nTail >= len) {
 			::memcpy(_pend, buf, len);
 			_pend += len;
+			if (_pend >= _last())
+				_pend = _data + (_pend - _last());
 		} else {
 			::memcpy(_pend, buf, nTail);
 			buf = (char *)buf + nTail;
@@ -155,7 +201,7 @@ public:
 	}
 
 	void *wlock(size_t &len) {
-		assert(_data);
+		//assert(_data);
 
 		if (wlocked()) { return NULL; }
 
@@ -191,6 +237,8 @@ public:
 		}
 
 		_pend += len;
+		if (_pend >= _last())
+			_pend = _data + (_pend - _last());
 		BT_CLEAR(_state, STATE_WRITE_LOCKED);
 		return true;
 	}

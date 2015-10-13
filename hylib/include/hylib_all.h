@@ -53,7 +53,7 @@
 #include "_prolog.h"
 #include "macro.h"
 #include "compare.h"
-#include "log.h"
+//#include "log.h"
 #include "util.h"
 #include "stl_ext.h"
 #include "util_tmpl.h"
