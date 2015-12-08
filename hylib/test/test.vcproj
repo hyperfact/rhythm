@@ -204,6 +204,10 @@
 			Name="tests"
 			>
 			<File
+				RelativePath=".\testChainedBuf.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\testCycBuf.cpp"
 				>
 			</File>

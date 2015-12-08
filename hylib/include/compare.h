@@ -58,10 +58,10 @@
 #define BT_BIT_SET(code, bit)			BT_SET((code), 1U<<(bit))
 #define BT_BIT_CLEAR(code, bit)			BT_CLEAR((code), 1U<<(bit))
 
-#define BT_SET_TMP(code, maskCode)		((code) | (maskCode))
-#define BT_CLEAR_TMP(code, maskCode)	((code) & (~(maskCode)))
-#define BT_BIT_SET_TMP(code, bit)		BT_SET((code), 1U<<(bit))
-#define BT_BIT_CLEAR_TMP(code, bit)		BT_CLEAR((code), 1U<<(bit))
+#define BT_SET_EXPR(code, maskCode)		((code) | (maskCode))
+#define BT_CLEAR_EXPR(code, maskCode)	((code) & (~(maskCode)))
+#define BT_BIT_SET_EXPR(code, bit)		BT_SET((code), 1U<<(bit))
+#define BT_BIT_CLEAR_EXPR(code, bit)	BT_CLEAR((code), 1U<<(bit))
 
 ////////////////////////////////////////////////////////////////////////////////
 // Pointer comparison:
