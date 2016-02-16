@@ -32,7 +32,7 @@
 
 _HYLIB_BEGIN
 
-template <class _Alloc = std::allocator<void> >
+template <class _Alloc = std::allocator<char> >
 class chained_buf;
 
 template <class _Alloc>
@@ -247,7 +247,7 @@ public:
 	}
 
 	static size_t max_size() {
-		return (size_t)-1;
+		return MAX_SIZE;
 	}
 
 	_buf_chain *_AllocChain(size_t expect_len) {
@@ -310,6 +310,10 @@ protected:
 		_NodePtr chain_;
 		size_t offset_;
 	};
+
+public:
+	typedef RLocker<_MyType> rdlocker;
+	typedef WLocker<_MyType> wtlocker;
 
 public:
 	chained_buf() {
@@ -417,6 +421,9 @@ public:
 		if (wlocked())
 			return nullptr;
 
+		if (MAX_SIZE == llen)
+			llen = ((_Pwt()==_End()) ? 0 : _Pwt()->post_avail());
+
 		if (_Pwt()!=_End() && llen<=_Pwt()->avail()) {
 			if (llen <= _Pwt()->post_avail()) {
 				BT_SET(_Flags(), STATE_WRITE_LOCKED);
@@ -457,6 +464,9 @@ public:
 
 		if (0 == len)
 			return 0;
+
+		if (MAX_SIZE == len)
+			len = _AvailAcc();
 
 		size_t remain = len;
 		int n = 0;
@@ -530,6 +540,27 @@ public:
 			} else {
 				BT_CLEAR(chain->flags, _Node::F_WLOCK);
 			}
+		}
+		BT_CLEAR(_Flags(), STATE_WRITE_LOCKED);
+		return true;
+	}
+
+	bool wunlock(size_t len) {
+		if (!wlocked())
+			return false;
+		if (_Pwt() == _End())
+			return false;
+		
+		size_t rem = len;
+		for (_NodePtr chain = _Pwt();
+			chain!=_End() && rem>0 /*&&BT_IS_SET(chain->flags, _Node::F_WLOCK)*/;
+			chain = chain->next) {
+			size_t ulen = min(rem, chain->post_avail());
+			bool suc = chain->wunlock(chain->plast(), ulen);
+			_Len() += ulen;
+			rem -= ulen;
+			assert(suc);
+			(void)suc;
 		}
 		BT_CLEAR(_Flags(), STATE_WRITE_LOCKED);
 		return true;
@@ -719,12 +750,7 @@ public:
 		if (any_locked())
 			return false;
 
-		for (_NodePtr ch=_Beg(), next=nullptr; ch!=_End(); ch=next) {
-			next = ch->next;
-			_FreeChain(ch);
-		}
-		_Total() = 0;
-		_Len() = 0;
+		_Tidy();
 		return true;
 	}
 
@@ -735,7 +761,12 @@ protected:
 		_Flags() = STATE_NONE;
 	}
 	void _Tidy() {
-		clear();
+		for (_NodePtr ch=_Beg(), next=nullptr; ch!=_End(); ch=next) {
+			next = ch->next;
+			_FreeChain(ch);
+		}
+		_Total() = 0;
+		_Len() = 0;
 	}
 
 	void _Insert(_NodePtr where, _NodePtr chain) {

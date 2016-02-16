@@ -33,6 +33,64 @@ struct _buf_base
 		STATE_READ_LOCKED		= 1,
 		STATE_WRITE_LOCKED		= 1<<1,
 	};
+
+	static const size_t MAX_SIZE = (size_t)-1;
+};
+
+template <class B>
+struct RLocker {
+	typedef const void * pointer_type;
+
+	RLocker(B &b, size_t llen=_buf_base::MAX_SIZE) : _buf(b), _llen(llen) {
+		_ptr = b.rlock(_llen);
+	}
+
+	~RLocker() {
+		if (_buf.rlocked())
+			_buf.runlock(_ptr, 0);
+	}
+
+	void unlock(size_t len=_buf_base::MAX_SIZE) {
+		if (len == _buf_base::MAX_SIZE)
+			len = _llen;
+		_buf.runlock(_ptr, len);
+	}
+
+	size_t size() const { return _llen; }
+
+	operator pointer_type() const { return _ptr; }
+private:
+	B &_buf;
+	pointer_type _ptr;
+	size_t _llen;
+};
+
+template <class B>
+struct WLocker {
+	typedef void *pointer_type;
+
+	WLocker(B &b, size_t llen=_buf_base::MAX_SIZE) : _buf(b), _llen(llen) {
+		_ptr = b.wlock(_llen);
+	}
+
+	~WLocker() {
+		if (_buf.wlocked())
+			_buf.wunlock(_ptr, 0);
+	}
+
+	void unlock(size_t len=_buf_base::MAX_SIZE) {
+		if (len == _buf_base::MAX_SIZE)
+			len = _llen;
+		_buf.wunlock(_ptr, len);
+	}
+
+	size_t size() const { return _llen; }
+
+	operator pointer_type() { return _ptr; }
+private:
+	B &_buf;
+	pointer_type _ptr;
+	size_t _llen;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -204,6 +262,9 @@ public:
 		//assert(_data);
 
 		if (wlocked()) { return NULL; }
+
+		if (MAX_SIZE == len)
+			len = avail();
 
 		if (avail() < len) {
 			_grow(len - avail());
@@ -532,6 +593,9 @@ public:
 		//assert(_data);
 		
 		if (wlocked()) { return NULL; }
+
+		if (MAX_SIZE == len)
+			len = avail();
 
 		if (avail() < len) {
 			_grow(len - avail());
