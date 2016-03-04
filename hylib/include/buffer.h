@@ -15,9 +15,15 @@
 
 #include <assert.h>
 #include <xutility>
+#include <memory>
 
 _HYLIB_BEGIN
 ////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+#ifndef nullptr
+#  define nullptr NULL
+#endif // nullptr 
+
 struct HalfGrowPolicy {
 	static size_t grow_size(size_t cur, size_t inc) {
 		inc = max(inc, cur/2); // grow by 50%
@@ -34,7 +40,28 @@ struct _buf_base
 		STATE_WRITE_LOCKED		= 1<<1,
 	};
 
+	struct iovec {
+		void	*buf;
+		size_t	len;
+	};
+
 	static const size_t MAX_SIZE = (size_t)-1;
+};
+
+template <class _Alloc>
+struct _buf_base_alloc : public _buf_base {
+	_buf_base_alloc(const _Alloc &alloc=_Alloc()) : _alloc(alloc) {}
+
+	char *_AllocBuffer(size_t size) {
+		return _alloc.allocate(size);
+	}
+
+	void _FreeBuffer(char *p) {
+		_alloc.deallocate((char *)p, 1);
+	}
+
+	typedef typename _Alloc::rebind<char>::other _AlTy;
+	_AlTy _alloc;
 };
 
 template <class B>
@@ -94,8 +121,12 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-template <bool _Elastic=true, class _GrowPolicy = HalfGrowPolicy>
-struct cyc_buf : public _buf_base
+template <
+	bool _Elastic=true,
+	class _GrowPolicy = HalfGrowPolicy,
+	class _Alloc = std::allocator<char>
+>
+struct cyc_buf : public _buf_base_alloc<_Alloc>
 {
 protected:
 	typedef cyc_buf<_Elastic, _GrowPolicy> _MyType;
@@ -109,7 +140,7 @@ public:
 		++size; // 环形缓冲区末尾需要一个空字节
 		size = DWORDAlign(size);
 		_total = size;
-		_data = new char[_total];
+		_data = _AllocBuffer(_total);
 		_pbeg = _pend = _data;
 		_state = STATE_NONE;
 	}
@@ -131,14 +162,14 @@ public:
 
 	void _Init() {
 		_total = 0;
-		_data = NULL;
-		_pbeg = NULL;
-		_pend = NULL;
+		_data = nullptr;
+		_pbeg = nullptr;
+		_pend = nullptr;
 		_state = STATE_NONE;
 	}
 
 	void _Tidy() {
-		SafeDeleteArray(_data);
+		_FreeBuffer(_data);
 	}
 
 	void assign(const _MyType &o) {
@@ -148,7 +179,7 @@ public:
 		_Tidy();
 		if (o._data) {
 			_total = o._total;
-			_data = new char[_total];
+			_data = _AllocBuffer(_total);
 			_pbeg = _data;
 			_pend = _data + o.peek(_data, _total);
 			_state = STATE_NONE;
@@ -166,7 +197,7 @@ public:
 	}
 
 	size_t capacity() const {
-		return _total-1;
+		return ((0==_total) ? 0 : (_total-1));
 	}
 
 	bool empty() const {
@@ -180,8 +211,8 @@ public:
 		if (any_locked()) { return false; }
 
 		if (n <= _total) { return true; }
-		char *pnew = new char[n];
-		if (NULL == pnew) { return false; }
+		char *pnew = _AllocBuffer(n);
+		if (nullptr == pnew) { return false; }
 
 		size_t sz = 0;
 		if (_data) {
@@ -193,7 +224,7 @@ public:
 				::memcpy(pnew, _pbeg, nTail);
 				::memcpy(pnew+nTail, _data, sz-nTail);
 			}
-			SafeDeleteArray(_data);
+			_FreeBuffer(_data);
 		}
 		
 		_data = pnew;
@@ -231,6 +262,8 @@ public:
 		if (_pbeg >= _last()) {
 			_pbeg = _data + (_pbeg-_last());
 		}
+		if (_pbeg == _pend)
+			_repos();
 		return len;
 	}
 
@@ -261,7 +294,10 @@ public:
 	void *wlock(size_t &len) {
 		//assert(_data);
 
-		if (wlocked()) { return NULL; }
+		if (wlocked()) {
+			len = 0;
+			return nullptr;
+		}
 
 		if (MAX_SIZE == len)
 			len = avail();
@@ -304,12 +340,86 @@ public:
 		return true;
 	}
 
+	int wlock(size_t &len, iovec *vecs, int nvec) {
+		if (wlocked()) {
+			len = 0;
+			return nullptr;
+		}
+
+		if (MAX_SIZE == len)
+			len = avail();
+
+		if (avail() < len) {
+			_grow(len - avail());
+		}
+
+		assert(_data != nullptr);
+		assert(avail() >= len);
+		size_t part1 = (size_t)((_pend>=_pbeg) ? (_last()-_pend) : avail());
+		size_t part2 = (size_t)((_pend>=_pbeg) ? (_pbeg-_data) : 0);
+
+		if (nullptr == vecs)
+			return ((part1 < len) ? 2 : 1);
+
+		int n = 0;
+		size_t remain = len;
+
+		size_t seg = min(remain, part1);
+		vecs[n].buf = _pend;
+		vecs[n].len = seg;
+		++n;
+		remain -= seg;
+
+		if (n<nvec && remain>0) {
+			vecs[n].buf = _data;
+			vecs[n].len = remain;
+			++n;
+		}
+
+		BT_SET(_state, STATE_WRITE_LOCKED);
+		return n;
+	}
+
+	bool wunlock(size_t len) {
+		assert(_data);
+
+		if (!wlocked())
+			return false;
+
+		if (len > avail())
+			return false;
+
+		size_t part1 = (size_t)((_pend>=_pbeg) ? (_last()-_pend) : avail());
+		size_t part2 = (size_t)((_pend>=_pbeg) ? (_pbeg-_data) : 0);
+
+		size_t remain = len;
+		size_t seg = min(remain, part1);
+		_pend += seg;
+		remain -= seg;
+		if (remain > 0) {
+			assert(_pbeg <= _pend);
+			assert(remain <= part2);
+			_pend = _data + remain;
+			assert(_pbeg > _pend);
+		}
+
+		if (_pend >= _last())
+			_pend = _data + (_pend - _last());
+		BT_CLEAR(_state, STATE_WRITE_LOCKED);
+		return true;
+	}
+
 	const void *rlock(size_t &len) {
 		assert(_data);
 
-		if (rlocked()) { return NULL; }
+		if (rlocked()) {
+			len = 0;
+			return nullptr;
+		}
 
 		len = min(len, size());
+		if (0 == len)
+			return nullptr;
 
 		if ((size_t)(_last()-_pbeg) < len) {
 			if (_Elastic) {
@@ -339,6 +449,79 @@ public:
 		}
 
 		_pbeg += len;
+		if (_pbeg == _pend)
+			_repos();
+		BT_CLEAR(_state, STATE_READ_LOCKED);
+		return true;
+	}
+
+	int rlock(size_t &len, iovec *vecs, int nvec) {
+		assert(_data);
+
+		if (rlocked()) {
+			len = 0;
+			return 0;
+		}
+
+		len = min(len, size());
+		if (0 == len)
+			return 0;
+
+		size_t part1 = (size_t)((_pend>=_pbeg) ? size() : (_last() - _pbeg));
+		size_t part2 = (size_t)((_pend>=_pbeg) ? 0 : (_pend - _data));
+
+		if (nullptr == vecs)
+			return ((part1 < len) ? 2 : 1);
+
+		if (nvec == 0)
+			return 0;
+
+		int n = 0;
+		size_t remain = len;
+
+		size_t seg = min(remain, part1);
+		vecs[n].buf = _pbeg;
+		vecs[n].len = seg;
+		++n;
+		remain -= seg;
+		
+		if (n<nvec && remain>0) {
+			vecs[n].buf = _data;
+			vecs[n].len = remain;
+			++n;
+		}
+
+		BT_SET(_state, STATE_READ_LOCKED);
+		return n;
+	}
+
+	bool runlock(size_t len) {
+		assert(_data);
+
+		if (!rlocked())
+			return false;
+
+		if (len > size()) {
+			return false;
+		}
+
+		size_t part1 = (size_t)((_pend>=_pbeg) ? size() : (_last() - _pbeg));
+		size_t part2 = (size_t)((_pend>=_pbeg) ? 0 : (_pend - _data));
+
+		size_t remain = len;
+		size_t seg = min(remain, part1);
+		_pbeg += seg;
+		remain -= seg;
+		if (remain > 0) {
+			assert(_pbeg > _pend);
+			assert(remain <= part2);
+			_pbeg = _data + remain;
+			assert(_pbeg <= _pend);
+		}
+
+		if (_pbeg == _pend)
+			_repos();
+
 		BT_CLEAR(_state, STATE_READ_LOCKED);
 		return true;
 	}
@@ -434,10 +617,10 @@ protected:
 				return;
 			} else {
 				// case 5:
-				char *pnew = new char[_total];
+				char *pnew = _AllocBuffer(_total);
 				::memcpy(pnew, _pbeg, part1);
 				::memcpy(pnew+part1, _data, part2);
-				SafeDeleteArray(_data);
+				_FreeBuffer(_data);
 				_data = pnew;
 			}
 		}
@@ -457,8 +640,11 @@ protected:
 typedef cyc_buf<> CCycBuf;
 
 ////////////////////////////////////////////////////////////////////////////////
-template <class _GrowPolicy = HalfGrowPolicy>
-struct fixed_buf : public _buf_base
+template <
+	class _GrowPolicy = HalfGrowPolicy,
+	class _Alloc = std::allocator<char>
+>
+struct fixed_buf : public _buf_base_alloc<_Alloc>
 {
 protected:
 	typedef fixed_buf<_GrowPolicy> _MyType;
@@ -471,7 +657,7 @@ public:
 	explicit fixed_buf(size_t size) {
 		size = DWORDAlign(size);
 		_total = size;
-		_data = new char[size];
+		_data = _AllocBuffer(size);
 		_ppos = _data;
 		_state = STATE_NONE;
 	}
@@ -493,13 +679,13 @@ public:
 
 	void _Init() {
 		_total = 0;
-		_data = NULL;
-		_ppos = NULL;
+		_data = nullptr;
+		_ppos = nullptr;
 		_state = STATE_NONE;
 	}
 
 	void _Tidy() {
-		SafeDeleteArray(_data);
+		_FreeBuffer(_data);
 	}
 
 	void assign(const _MyType &o) {
@@ -509,7 +695,7 @@ public:
 		_Tidy();
 		if (o._data) {
 			_total = o._total;
-			_data = new char[_total];
+			_data = _AllocBuffer(_total);
 			_ppos = _data + o.peek(_data, _total);
 			_state = STATE_NONE;
 		} else {
@@ -538,14 +724,14 @@ public:
 		if (any_locked()) { return false; }
 
 		if (n <= _total) { return true; }
-		char *pnew = new char[n];
-		if (NULL == pnew) { return false; }
+		char *pnew = _AllocBuffer(n);
+		if (nullptr == pnew) { return false; }
 		
 		size_t sz = 0;
 		if (_data) {
 			sz = size();
 			::memcpy(pnew, _data, sz);
-			SafeDeleteArray(_data);
+			_FreeBuffer(_data);
 		}
 		_data = pnew;
 		_total = n;
@@ -554,7 +740,7 @@ public:
 	}
 
 	size_t peek(void *buf, size_t len) const {
-		assert(_data != NULL);
+		assert(_data != nullptr);
 
 		if (rlocked()) { return 0; }
 
@@ -564,7 +750,7 @@ public:
 	}
 
 	size_t read(void *buf, size_t len) {
-		assert(_data != NULL);
+		assert(_data != nullptr);
 
 		if (rlocked()) { return 0; }
 
@@ -575,7 +761,7 @@ public:
 	}
 
 	size_t write(const void *buf, size_t len) {
-		//assert(_data != NULL);
+		//assert(_data != nullptr);
 
 		if (wlocked()) { return 0; }
 
@@ -592,7 +778,10 @@ public:
 	void *wlock(size_t &len) {
 		//assert(_data);
 		
-		if (wlocked()) { return NULL; }
+		if (wlocked()) {
+			len = 0;
+			return nullptr;
+		}
 
 		if (MAX_SIZE == len)
 			len = avail();
@@ -625,7 +814,10 @@ public:
 	const void *rlock(size_t &len) {
 		assert(_data);
 
-		if (rlocked()) { return NULL; }
+		if (rlocked()) {
+			len = 0;
+			return nullptr;
+		}
 
 		len = min(size(), len);
 		BT_SET(_state, STATE_READ_LOCKED);

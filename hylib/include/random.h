@@ -39,7 +39,7 @@ public:
 		return (int)next(32);
 	}
 	int nextInt(int nMin, int nMax) {
-		assert(nMin < nMax);
+		assert(nMin <= nMax);
 		if (nMin == nMax) { return nMin; }
 		return nMin + (int)nextUint((unsigned int)(nMax-nMin));
 	}
@@ -124,15 +124,35 @@ public:
 		return -1;
 	}
 
+	void nextBytes(void *buf, size_t n) {
+		assert(buf != NULL);
+		unsigned *pf = (unsigned *)buf;
+		unsigned *pe = pf + n/sizeof(unsigned);
+		unsigned padding = n % sizeof(unsigned);
+		for (; pf<pe; ++pf)
+			*pf = next(32);
+		if (padding > 0) {
+			unsigned rp = next(32);
+			unsigned char *pp = (unsigned char *)pf;
+			unsigned char *prp = (unsigned char *)&rp;
+			for (; padding>0; --padding)
+				*pp++ = *prp++;
+		}
+	}
+
 //******************************************************************************
 protected:
 	random() {
-		::init_genrand(::time(NULL));
+		::init_genrand((unsigned long)::time(NULL));
+	}
+
+	~random() {
 	}
 
 	unsigned next(unsigned nBits) {
 		assert(nBits <= 32);
-		return ::genrand_int32() >> (32-nBits);
+		unsigned n = ::genrand_int32();
+		return n >> (32-nBits);
 	}
 };
 

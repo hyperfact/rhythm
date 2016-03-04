@@ -26,9 +26,7 @@
 
 #include "buffer.h"
 
-#ifndef nullptr
-#  define nullptr NULL
-#endif // nullptr 
+
 
 _HYLIB_BEGIN
 
@@ -41,10 +39,6 @@ public:
 	enum { MAX_TO_REALIGN_IN_EXPAND = 2048, };
 	enum { MIN_ALLOC_SIZE = 256, };
 
-	struct iovec {
-		void	*buf;
-		size_t	len;
-	};
 	struct _buf_chain {
 		enum {
 			F_NONE			= 0x00000000,
@@ -102,17 +96,20 @@ public:
 		}
 
 		bool should_realign(size_t inc) const {
+			assert(!any_locked());
 			return (!any_locked())
 				&& ((inc <= (capacity()-size()))
 				&& (size() < capacity()/2)
 				&& (size() < MAX_TO_REALIGN_IN_EXPAND));
 		}
 		void clear() {
+			assert(!any_locked());
 			if (any_locked())
 				return;
 			len = offset = 0;
 		}
 		void align() {
+			assert(!any_locked());
 			if (any_locked())
 				return;
 			assert(buf != nullptr);
@@ -120,14 +117,17 @@ public:
 			offset = 0;
 		}
 		size_t prepend(const void *data, size_t datalen) {
+			assert(!any_locked());
 			if (any_locked())
 				return 0;
 			assert(buf != nullptr);
 			size_t n = min(datalen, pre_avail());
-			memcpy_s(buf, pre_avail(), data, n);
+			// FIXME:
+			memcpy_s(pbegin()-n, pre_avail(), data, n);
 			return n;
 		}
 		size_t append_no_align(const void *data, size_t datalen) {
+			assert(!wlocked());
 			if (wlocked())
 				return 0;
 			assert(buf != nullptr);
@@ -137,6 +137,7 @@ public:
 			return n;
 		}
 		size_t append(const void *data, size_t datalen) {
+			assert(!any_locked());
 			if (any_locked())
 				return 0;
 			assert(buf != nullptr);
@@ -157,19 +158,25 @@ public:
 			}
 		}
 		size_t peek(void *data, size_t datalen) const {
+			assert(!rlocked());
 			if (rlocked())
 				return 0;
 			assert(buf != nullptr);
 			size_t rd = min(datalen, len);
-			memcpy_s(data, datalen, buf, rd);
+			memcpy_s(data, datalen, pbegin(), rd);
 			return rd;
 		}
 
 		void *wlock(size_t &llen) {
-			if (wlocked())
+			assert(!wlocked());
+			if (wlocked()) {
+				llen = 0;
 				return nullptr;
-			if (0 == avail())
+			}
+			if (0 == avail()) {
+				llen = 0;
 				return nullptr;
+			}
 			if (llen > post_avail()) {
 				if (should_realign(llen))
 					align();
@@ -179,6 +186,7 @@ public:
 			return plast();
 		}
 		bool wunlock(void *p, size_t ullen) {
+			assert(wlocked());
 			if (!wlocked())
 				return false;
 			if (p != plast())
@@ -190,13 +198,17 @@ public:
 			return true;
 		}
 		const void *rlock(size_t &llen) {
-			if (rlocked())
+			assert(!rlocked());
+			if (rlocked()) {
+				llen = 0;
 				return nullptr;
+			}
 			llen = min(llen, size());
 			BT_SET(flags, F_RLOCK);
 			return pbegin();
 		}
 		bool runlock(const void *p, size_t ullen) {
+			assert(rlocked());
 			if (!rlocked())
 				return false;
 			if (p != pbegin())
@@ -256,6 +268,7 @@ public:
 			to_alloc = MIN_ALLOC_SIZE;
 		// OPTMZ: 自定义内存分配器
 		void *p = _alloc.allocate(to_alloc);
+		assert(p);
 		if (nullptr == p)
 			return nullptr;
 		_buf_chain *chain = (_buf_chain *)p;
@@ -351,6 +364,7 @@ public:
 	}
 
 	size_t peek(void *buf, size_t len) const {
+		assert(!rlocked());
 		if (rlocked())
 			return 0;
 
@@ -359,13 +373,18 @@ public:
 
 		size_t remain = len;
 		_NodeCPtr chain = _Prd();
+		char *ppeek = (char *)buf;
+		size_t npeek = 0;
 		for (; chain!=_End() && remain>0; chain=chain->next) {
-			remain -= chain->peek(buf, remain);
+			npeek = chain->peek(ppeek, remain);
+			remain -= npeek;
+			ppeek += npeek;
 		}
 		return len-remain;
 	}
 
 	size_t read(void *buf, size_t len) {
+		assert(!rlocked());
 		if (rlocked())
 			return 0;
 		len = peek(buf, len);
@@ -376,12 +395,14 @@ public:
 	}
 
 	size_t drain(size_t len) {
+		assert(!rlocked());
 		if (rlocked())
 			return 0;
 		return _Drain(len);
 	}
 
 	size_t write(const void *data, size_t datalen) {
+		assert(!wlocked());
 		if (wlocked())
 			return 0;
 
@@ -418,7 +439,13 @@ public:
 		return datalen;
 	}
 	void *wlock(size_t &llen) {
-		if (wlocked())
+		assert(!wlocked());
+		if (wlocked()) {
+			llen = 0;
+			return nullptr;
+		}
+
+		if (0 == llen)
 			return nullptr;
 
 		if (MAX_SIZE == llen)
@@ -443,6 +470,9 @@ public:
 	}
 
 	bool wunlock(void *p, size_t len) {
+		if (nullptr == p)
+			return false;
+		assert(wlocked());
 		if (!wlocked())
 			return false;
 		if (_Pwt() == _End())
@@ -459,8 +489,11 @@ public:
 	}
 
 	int wlock(size_t &len, iovec *vecs, int nvec) {
-		if (wlocked())
+		assert(!wlocked());
+		if (wlocked()) {
+			len = 0;
 			return 0;
+		}
 
 		if (0 == len)
 			return 0;
@@ -477,17 +510,24 @@ public:
 				if (chain->post_avail()<llen0 && chain->should_realign(llen0))
 					chain->align();
 			}
-			if (0 == chain->post_avail())
-				_Pwt() = chain = chain->next;
+			bool first = true;
+			if (0 == chain->post_avail()) {
+				chain = chain->next;
+				first = false;
+			}
 
 			for (; remain>0 && chain!=_End(); chain=chain->next) {
 				assert(chain->post_avail() > 0);
 				if (0 == chain->post_avail())
 					continue;
+
+				assert(first || 0==chain->size());
 				size_t llen = min(remain, chain->post_avail());
 
 				if (vecs != nullptr) {
 					if (n < nvec) {
+						if (0 == n)
+							_Pwt() = chain;
 						vecs[n].buf = chain->wlock(llen);
 						vecs[n].len = llen;
 					} else
@@ -495,6 +535,7 @@ public:
 				}
 				remain -= llen;
 				++n;
+				first = false;
 			}
 		}
 
@@ -514,15 +555,22 @@ public:
 		return n;
 	}
 	bool wunlock(iovec *vecs, int nvec) {
+		assert(wlocked());
 		if (!wlocked())
 			return false;
 		if (_Pwt() == _End())
 			return false;
+		
+		if (nullptr == vecs) {
+			// unlock all
+			_ClearWLockFlag();
+			return true;
+		}
 
 		int n = 0;
 		// verify pointer and len in vecs
 		for (_NodePtr chain = _Pwt();
-			chain!=_End() && vecs!=nullptr && n<nvec;
+			chain!=_End() && n<nvec;
 			chain=chain->next, ++n) {
 			if (vecs[n].buf!=chain->plast() || vecs[n].len>chain->post_avail())
 				return false;
@@ -530,24 +578,24 @@ public:
 
 		n = 0;
 		for (_NodePtr chain = _Pwt();
-			chain != _End()/*&&BT_IS_SET(chain->flags, _Node::F_WLOCK)*/;
+			chain != _End() && n<nvec /*&&BT_IS_SET(chain->flags, _Node::F_WLOCK)*/;
 			chain = chain->next,++n) {
-			if (vecs!=nullptr && n<nvec) {
 				bool suc = chain->wunlock(vecs[n].buf, vecs[n].len);
-				_Len() += vecs[n].len;
 				assert(suc);
-				(void)suc;
-			} else {
-				BT_CLEAR(chain->flags, _Node::F_WLOCK);
-			}
+				if (suc && vecs[n].len>0) {
+					_Len() += vecs[n].len;
+					_Pwt() = chain;
+				}
 		}
-		BT_CLEAR(_Flags(), STATE_WRITE_LOCKED);
+		_ClearWLockFlag();
 		return true;
 	}
 
 	bool wunlock(size_t len) {
+		assert(wlocked());
 		if (!wlocked())
 			return false;
+		assert(_Pwt() != _End());
 		if (_Pwt() == _End())
 			return false;
 		
@@ -555,23 +603,31 @@ public:
 		for (_NodePtr chain = _Pwt();
 			chain!=_End() && rem>0 /*&&BT_IS_SET(chain->flags, _Node::F_WLOCK)*/;
 			chain = chain->next) {
+			assert(chain->post_avail() > 0);
 			size_t ulen = min(rem, chain->post_avail());
 			bool suc = chain->wunlock(chain->plast(), ulen);
-			_Len() += ulen;
-			rem -= ulen;
 			assert(suc);
-			(void)suc;
+			if (suc && ulen>0) {
+				_Len() += ulen;
+				rem -= ulen;
+				_Pwt() = chain;
+			}
 		}
-		BT_CLEAR(_Flags(), STATE_WRITE_LOCKED);
+		_ClearWLockFlag();
 		return true;
 	}
 
 	const void *rlock(size_t &len) {
-		if (rlocked())
+		assert(!rlocked());
+		if (rlocked()) {
+			len = 0;
 			return nullptr;
+		}
 
-		if (_Prd() == _End())
+		if (_Prd() == _End()) {
+			len = 0;
 			return nullptr;
+		}
 
 		len = min(len, size());
 		if (0 == len)
@@ -618,6 +674,10 @@ public:
 		return prd->rlock(len);
 	}
 	bool runlock(const void *p, size_t len) {
+		if (nullptr == p)
+			return false;
+
+		assert(rlocked());
 		if (!rlocked())
 			return false;
 
@@ -644,11 +704,16 @@ public:
 		return true;
 	}
 	int rlock(size_t &len, iovec *vecs, int nvec) {
-		if (rlocked())
+		assert(!rlocked());
+		if (rlocked()) {
+			len = 0;
 			return 0;
+		}
 
-		if (_Prd() == _End())
+		if (_Prd() == _End()) {
+			len = 0;
 			return 0;
+		}
 
 		if (0 == len)
 			return 0;
@@ -686,19 +751,25 @@ public:
 	}
 
 	_MyType &transplant(_MyType &from, size_t len) {
+		assert(!any_locked());
+		assert(!from.any_locked());
 		if (any_locked() || from.any_locked())
 			return *this;
 		if (0==len || from.empty())
 			return *this;
 		len = min(len, from.size());
 		if (from.size() == len) {
+			from.trim();
 			_NodePtr chainB = from._Beg();
 			_NodePtr chainL = from._Pwt();
-			chainL->next = _Last()->next;
-			_Last()->next = chainB;
+			assert(chainB==chainL || chainB->next!=from._End());
+
+			chainL->next = _Pwt()->next;
+			_Pwt()->next = chainB;
 			if (_Last() == _Pwt())
 				_Last() = chainL;
 			_Pwt() = chainL;
+
 			_Total() += from._Total();
 			assert(_Total() == _TotalAcc());
 			_Len() += from._Len();
@@ -721,10 +792,12 @@ public:
 			if (remain > 0) {
 				size_t llen = remain;
 				const void *p = ch->rlock(llen);
+				assert(llen == remain);
 				write(p, llen);
 				ch->runlock(p, llen);
 				from._Len() -= remain;
 			}
+			assert(0 == remain);
 		}
 		return *this;
 	}
@@ -754,6 +827,15 @@ public:
 		return true;
 	}
 
+	void trim() {
+		assert(!any_locked());
+		if (any_locked())
+			return;
+
+		for (_NodePtr prev=_Pwt(); prev!=_End()&&prev->next!=_End(); )
+			prev = _Erase(prev, true);
+	}
+
 protected:
 	void _Init() {
 		_head.init();
@@ -761,12 +843,11 @@ protected:
 		_Flags() = STATE_NONE;
 	}
 	void _Tidy() {
-		for (_NodePtr ch=_Beg(), next=nullptr; ch!=_End(); ch=next) {
+		for (_NodePtr ch=_Beg(), next=_End(); ch!=_End(); ch=next) {
 			next = ch->next;
 			_FreeChain(ch);
 		}
-		_Total() = 0;
-		_Len() = 0;
+		_Init();
 	}
 
 	void _Insert(_NodePtr where, _NodePtr chain) {
@@ -803,7 +884,9 @@ protected:
 		_NodePtr chain = _Prd();
 		_NodePtr prev = _Head();
 		for (; chain!=_End() && remain>0; /**/) {
-			remain -= _ChainDrain(chain, remain);
+			size_t dr = _ChainDrain(chain, remain);
+			assert(dr <= remain);
+			remain -= dr;
 
 			if (0 == chain->size()) {
 				chain = _Erase(prev);
@@ -812,7 +895,20 @@ protected:
 				chain = chain->next;
 			}
 		}
+		for (; chain!=_End(); chain=chain->next)
+			BT_CLEAR(chain->flags, _Node::F_RLOCK);
 		return (len - remain);
+	}
+
+	void _ClearRLockFlag() {
+		for (_NodePtr n=_Prd(); n!=_End(); n=n->next)
+			BT_CLEAR(n->flags, _Node::F_RLOCK);
+		BT_CLEAR(_Flags(), STATE_READ_LOCKED);
+	}
+	void _ClearWLockFlag() {
+		for (_NodePtr n=_Pwt(); n!=_End(); n=n->next)
+			BT_CLEAR(n->flags, _Node::F_WLOCK);
+		BT_CLEAR(_Flags(), STATE_WRITE_LOCKED);
 	}
 
 	size_t _ChainAppend(_NodePtr chain, const void *data, size_t datalen) {
