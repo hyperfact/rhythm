@@ -107,10 +107,10 @@ public:
 		case LVL_NONE:
 		case LVL_DEBUG:
 #ifdef _WIN32
-#  if defined _CrtDbgBreak
-			::_CrtDbgBreak();
+#  if defined(_CrtDbgBreak)
+			_CrtDbgBreak();
 #  else // _CrtDbgBreak
-			::DebugBreak();
+			DebugBreak();
 #  endif // _CrtDbgBreak
 #endif // _WIN32
 			break;
